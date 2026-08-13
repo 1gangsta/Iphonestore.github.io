@@ -1,0 +1,389 @@
+<html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Checkout — iPhone Shop</title>
+  <meta name="description" content="Complete your iPhone order securely via Ecocash or bank transfer, pay in full or with a 75% pre-order deposit." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230ea5e9'/%3E%3Ctext x='32' y='43' font-family='Arial,sans-serif' font-size='30' font-weight='700' fill='white' text-anchor='middle'%3EiS%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="checkout.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="index.html" class="logo">iPhone Shop</a>
+      <nav class="nav-links">
+        <a href="index.html" class="nav-link">Home</a>
+        <a href="products.html" class="nav-link">Products</a>
+        <a href="about.html" class="nav-link">About</a>
+        <a href="contact.html" class="nav-link">Contact</a>
+      </nav>
+      <div class="header-actions">
+        <button id="cart-btn" class="button button-primary">Cart (<span id="cart-count">0</span>)</button>
+        <a href="cart.html" class="button button-secondary">Cart Page</a>
+        <a href="checkout.html" class="button button-primary">Checkout</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container checkout-main">
+    <div class="section-heading">
+      <h1>Your Cart &amp; Checkout</h1>
+      <p>Review items, choose payment method (Ecocash or Bank Transfer), and place your order.</p>
+    </div>
+
+    <div class="checkout-layout">
+      <section id="cart-view" class="checkout-card">
+        <h3>Order Summary</h3>
+        <div id="cart-items"></div>
+        <div id="cart-summary"></div>
+      </section>
+
+      <section id="payment-section" class="checkout-card">
+        <h3>Payment</h3>
+        <form id="payment-form">
+          <div class="payment-name-row">
+            <label class="form-field">Full name<input name="name" required /></label>
+            <label class="form-field">Email<input name="email" type="email" required /></label>
+          </div>
+          <label class="form-field">Order type
+            <select id="order-type" name="orderType">
+              <option value="full">Full payment</option>
+              <option value="deposit">Pre-order deposit (75%)</option>
+            </select>
+          </label>
+          <div id="order-amount-summary" class="order-amount-summary"></div>
+          <label class="form-field">Payment method
+            <select id="payment-method" name="method">
+              <option value="ecocash">Ecocash (mobile money)</option>
+              <option value="bank">Bank Transfer</option>
+            </select>
+          </label>
+
+          <div id="ecocash-fields" class="payment-method-fields">
+            <label class="form-field">Phone (Ecocash number)<input name="ecocash_phone" placeholder="+2637XXXXXXXX" /></label>
+            <p class="ecocash-hint">We'll send a payment prompt straight to this number for $<span id="ecocash-pay-amount">0.00</span> — enter your EcoCash PIN on your phone to confirm. No need to dial anything yourself.</p>
+          </div>
+
+          <div id="bank-fields" class="payment-method-fields hidden">
+            <label class="form-field">Bank name<input name="bank_name" placeholder="Bank name" /></label>
+            <label class="form-field">Account name<input name="bank_account_name" placeholder="Account holder" /></label>
+            <label class="form-field">Account number<input name="bank_account_number" placeholder="Account number" /></label>
+          </div>
+
+          <div class="payment-method-fields">
+            <h4 style="margin:0 0 0.4rem;color:#f8fafc;">Identity verification (KYC)</h4>
+            <p class="ecocash-hint">Required for every order — this protects both you and us against fraud and lets us confirm the device is going to its rightful owner.</p>
+            <label class="form-field">National ID or passport number<input name="idNumber" placeholder="e.g. 63-XXXXXXX-X-XX" required /></label>
+            <label class="form-field">Photo of your ID or passport
+              <input name="idDocument" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" required />
+            </label>
+            <p class="ecocash-hint">JPG, PNG, WEBP, or PDF, up to 8MB. Stored securely and only used to verify your order.</p>
+          </div>
+
+          <div class="payment-actions">
+            <button type="submit" class="button button-primary">Place Order</button>
+          </div>
+        </form>
+
+        <div id="payment-result" class="payment-result"></div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-grid">
+      <p class="footer-note" style="margin-top:0;">© 2026 iPhone Shop. All rights reserved.</p>
+      <div class="footer-links">
+        <a href="privacy.html">Privacy Policy</a>
+        <a href="terms.html">Terms of Service</a>
+        <a href="returns.html">Returns &amp; Refunds</a>
+        <a href="contact.html">Contact</a>
+      </div>
+    </div>
+  </footer>
+
+  <div id="cart-modal" class="modal hidden">
+    <div class="modal-content">
+      <h2>Your Cart</h2>
+      <div id="cart-modal-items"></div>
+      <div class="cart-total">Total: $<span id="cart-modal-total">0.00</span></div>
+      <button id="close-cart" class="button button-secondary">Close</button>
+    </div>
+  </div>
+
+  <script>
+  // Read cart from localStorage and render with thumbnails and controls
+  function fmt(n){return Number(n).toFixed(2)}
+  function getCart(){return JSON.parse(localStorage.getItem('cart')||'{}')}
+  function saveCart(cart){ localStorage.setItem('cart', JSON.stringify(cart)); }
+  function updateCartCount(){ const countEl = document.getElementById('cart-count'); if(!countEl) return; const cart = getCart(); countEl.textContent = Object.values(cart).reduce((s,v)=>s+v,0); }
+
+  async function renderCart(){
+    const products = await fetch('products.json').then(r=>r.ok? r.json(): [] ).catch(()=>[]);
+    const cart = getCart();
+    const container = document.getElementById('cart-items');
+    const summary = document.getElementById('cart-summary');
+    container.innerHTML = '';
+    let total = 0;
+    if (!Object.keys(cart).length){ container.innerHTML = '<p class="cart-empty">Your cart is empty.</p>'; summary.innerHTML=''; updateCartCount(); return }
+
+    const list = document.createElement('div');
+    list.className = 'cart-list';
+
+    for(const id of Object.keys(cart)){
+      const qty = cart[id];
+      const p = products.find(x=>x.id===id) || {name:id,price:0,image:''};
+      total += (p.price||0)*qty;
+
+      const row = document.createElement('div');
+      row.className = 'cart-row';
+
+      const thumb = document.createElement('div');
+      thumb.className = 'cart-row-thumb';
+      if (p.image){ thumb.style.backgroundImage = `url('${p.image}')`; }
+
+      const info = document.createElement('div');
+      info.className = 'cart-row-info';
+      info.innerHTML = `<div class="cart-row-name">${p.name}</div><div class="cart-row-desc">${p.desc || ''}</div>`;
+
+      const controls = document.createElement('div');
+      controls.className = 'cart-row-controls';
+
+      const qtyBox = document.createElement('input');
+      qtyBox.type='number'; qtyBox.min=1; qtyBox.value = qty; qtyBox.className = 'qty-input'; qtyBox.addEventListener('change', (e)=>{
+        const v = Math.max(1, parseInt(e.target.value)||1);
+        const current = getCart(); current[id] = v; saveCart(current); renderCart(); refreshSummary();
+      });
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className='button button-sm'; removeBtn.textContent='Remove';
+      removeBtn.addEventListener('click', ()=>{
+        const current = getCart(); delete current[id]; saveCart(current); renderCart(); refreshSummary();
+      });
+
+      const price = document.createElement('div');
+      price.className = 'cart-row-price'; price.innerHTML = `$${fmt((p.price||0)*qty)}`;
+
+      controls.appendChild(qtyBox);
+      controls.appendChild(removeBtn);
+
+      row.appendChild(thumb);
+      row.appendChild(info);
+      row.appendChild(controls);
+      row.appendChild(price);
+
+      list.appendChild(row);
+    }
+
+    container.appendChild(list);
+    summary.innerHTML = `<div class="cart-total">Total: $<strong>${fmt(total)}</strong></div>`;
+    updateCartCount();
+  }
+
+  async function renderCartModal(){
+    const products = await fetch('products.json').then(r=>r.ok? r.json(): [] ).catch(()=>[]);
+    const cart = getCart();
+    const container = document.getElementById('cart-modal-items');
+    const totalEl = document.getElementById('cart-modal-total');
+    container.innerHTML = '';
+    let total = 0;
+    if (!Object.keys(cart).length){ container.innerHTML = '<p class="cart-empty">Your cart is empty.</p>'; totalEl.textContent='0.00'; return }
+    const list = document.createElement('div');
+    list.className = 'cart-modal-list';
+    for(const id of Object.keys(cart)){
+      const qty = cart[id];
+      const p = products.find(x=>x.id===id) || {name:id,price:0};
+      total += (p.price||0)*qty;
+      const item = document.createElement('div');
+      item.className = 'cart-modal-item';
+      item.innerHTML = `<span>${p.name} × ${qty}</span><span>$${fmt((p.price||0)*qty)}</span>`;
+      list.appendChild(item);
+    }
+    container.appendChild(list);
+    totalEl.textContent = fmt(total);
+  }
+
+  function computeCartTotal(products, cart){
+    return Object.entries(cart).reduce((sum,[id,qty])=>{
+      const baseId = String(id).split('::')[0];
+      const p = products.find(x=>x.id===baseId) || {price:0};
+      return sum + (p.price||0) * qty;
+    },0);
+  }
+
+  function updateCartSummary(total){
+    const orderType = document.getElementById('order-type');
+    const summary = document.getElementById('cart-summary');
+    if (!summary) return;
+    const type = orderType ? orderType.value : 'full';
+    let amountDue = total;
+    if (type === 'deposit'){
+      const deposit = total * 0.75;
+      amountDue = deposit;
+      summary.innerHTML = `<div class="cart-total">Total: $<strong>${fmt(total)}</strong><br/>Pre-order deposit due: $<strong>${fmt(deposit)}</strong></div>`;
+      const amountSummary = document.getElementById('order-amount-summary');
+      if (amountSummary) amountSummary.textContent = `Pre-order deposit due today: $${fmt(deposit)} (75% of total). Remaining $${fmt(total - deposit)} due on delivery.`;
+    } else {
+      summary.innerHTML = `<div class="cart-total">Total: $<strong>${fmt(total)}</strong></div>`;
+      const amountSummary = document.getElementById('order-amount-summary');
+      if (amountSummary) amountSummary.textContent = `Full payment due now: $${fmt(total)}.`;
+    }
+    updateEcocashAmount(amountDue);
+  }
+
+  function updateEcocashAmount(amount){
+    const amountEl = document.getElementById('ecocash-pay-amount');
+    if (!amountEl) return;
+    amountEl.textContent = fmt(Math.max(0, amount || 0));
+  }
+
+  // NOTE: renderCart() is defined earlier in this file (with color + desc).
+  // Keeping only one definition prevents duplicate-function confusion.
+
+  async function refreshSummary(){
+    const products = await fetch('products.json').then(r=>r.ok? r.json(): [] ).catch(()=>[]);
+    const total = computeCartTotal(products, getCart());
+    updateCartSummary(total);
+  }
+
+  document.addEventListener('DOMContentLoaded',()=>{
+    renderCart();
+    updateCartCount();
+    refreshSummary();
+
+    const method = document.getElementById('payment-method');
+    const orderType = document.getElementById('order-type');
+    const eco = document.getElementById('ecocash-fields');
+    const bank = document.getElementById('bank-fields');
+
+    method.addEventListener('change',()=>{
+      if (method.value==='ecocash'){ eco.classList.remove('hidden'); bank.classList.add('hidden') }
+      else { eco.classList.add('hidden'); bank.classList.remove('hidden') }
+    });
+
+    orderType.addEventListener('change', ()=>{
+      refreshSummary();
+    });
+
+    function showPaymentError(msg){
+      document.getElementById('payment-result').innerHTML = `<div class="payment-error">${msg}</div>`;
+    }
+
+    function buildWhatsAppOrderLink(orderId, summaryLines){
+      const lines = [`New order: ${orderId}`, ...summaryLines];
+      return `https://wa.me/263785233384?text=${encodeURIComponent(lines.join('\n'))}`;
+    }
+
+    function renderPaid(orderId, amountDue, total, extraLines){
+      document.getElementById('payment-result').innerHTML = `<div class="feature-card">✅ Payment received. Order reference: <strong>${orderId}</strong>.<br/>Paid: $${fmt(amountDue)} of $${fmt(total)} total.<br/><a class="button button-primary whatsapp-followup" href="${buildWhatsAppOrderLink(orderId, extraLines)}" target="_blank" rel="noopener noreferrer">Send order confirmation on WhatsApp</a></div>`;
+    }
+
+    function renderAwaitingManual(orderId, amountDue, total, extraLines){
+      document.getElementById('payment-result').innerHTML = `<div class="feature-card">Order recorded. Reference: <strong>${orderId}</strong>. Amount due: $${fmt(amountDue)} of $${fmt(total)} total.<br/>We'll confirm your bank transfer manually — send us proof of payment to speed things up.<br/><a class="button button-primary whatsapp-followup" href="${buildWhatsAppOrderLink(orderId, extraLines)}" target="_blank" rel="noopener noreferrer">Send order confirmation on WhatsApp</a></div>`;
+    }
+
+    async function pollOrderStatus(orderId, amountDue, total, extraLines){
+      const resultEl = document.getElementById('payment-result');
+      const maxAttempts = 40; // ~4 minutes at 6s intervals
+      for (let attempt = 0; attempt < maxAttempts; attempt++){
+        await new Promise(r => setTimeout(r, 6000));
+        let data;
+        try {
+          const res = await fetch(`/api/orders/${orderId}/status`);
+          data = await res.json();
+        } catch {
+          continue; // network hiccup — just try again next tick
+        }
+        if (data.status === 'paid'){
+          renderPaid(orderId, data.amountDue, data.total, extraLines);
+          return;
+        }
+        if (data.status === 'cancelled'){
+          resultEl.innerHTML = `<div class="payment-error">The EcoCash payment was cancelled or timed out. You can try again, or contact us on WhatsApp for help.<br/><a class="button button-primary whatsapp-followup" href="${buildWhatsAppOrderLink(orderId, extraLines)}" target="_blank" rel="noopener noreferrer">Contact us on WhatsApp</a></div>`;
+          return;
+        }
+      }
+      resultEl.innerHTML += `<div class="ecocash-hint" style="margin-top:0.75rem;">Still waiting on confirmation — if you already entered your PIN, this can take a few minutes. Reference: <strong>${orderId}</strong>.</div>`;
+    }
+
+    document.getElementById('payment-form').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const form = e.target;
+      const methodVal = document.getElementById('payment-method').value;
+      const orderTypeVal = document.getElementById('order-type').value;
+      const cartObj = getCart();
+      const submitBtn = form.querySelector('button[type="submit"]');
+
+      if (!Object.keys(cartObj).length){ showPaymentError('Your cart is empty — add an item before checking out.'); return; }
+
+      const fd = new FormData(form);
+      fd.set('method', methodVal);
+      fd.set('orderType', orderTypeVal);
+      fd.set('cart', JSON.stringify(cartObj));
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Placing order…';
+      document.getElementById('payment-result').innerHTML = '';
+
+      try {
+        const res = await fetch('/api/orders', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok){
+          showPaymentError(data.error || 'Could not place your order. Please try again.');
+          return;
+        }
+
+        const extraLines = [
+          `Name: ${fd.get('name')}`,
+          `Email: ${fd.get('email')}`,
+          `Payment method: ${methodVal === 'ecocash' ? `Ecocash (${fd.get('ecocash_phone')})` : `Bank transfer (${fd.get('bank_name')}, ${fd.get('bank_account_name')})`}`,
+          `Order type: ${orderTypeVal === 'deposit' ? 'Pre-order deposit' : 'Full payment'}`,
+          `Amount due: $${fmt(data.amountDue)}`,
+          `Order total: $${fmt(data.total)}`
+        ];
+
+        localStorage.removeItem('cart');
+        renderCart();
+
+        if (data.status === 'awaiting-manual'){
+          renderAwaitingManual(data.orderId, data.amountDue, data.total, extraLines);
+          return;
+        }
+
+        // EcoCash: Paynow has pushed a PIN prompt to the customer's phone.
+        document.getElementById('payment-result').innerHTML = `<div class="feature-card">📲 Check your phone — we've sent a payment request for $${fmt(data.amountDue)} to your EcoCash number.<br/>${data.instructions ? data.instructions.replace(/\n/g,'<br/>') : 'Enter your EcoCash PIN to approve it.'}<br/><span style="color:#94a3b8;">Order reference: ${data.orderId}</span></div>`;
+        pollOrderStatus(data.orderId, data.amountDue, data.total, extraLines);
+      } catch (err) {
+        showPaymentError('Something went wrong reaching the server. Please try again.');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Place Order';
+      }
+    });
+
+    const cartBtn = document.getElementById('cart-btn');
+    const cartModal = document.getElementById('cart-modal');
+    const closeCart = document.getElementById('close-cart');
+    if (cartBtn){
+      cartBtn.addEventListener('click', async ()=>{
+        await renderCartModal();
+        if (cartModal){
+          cartModal.classList.remove('hidden');
+          document.documentElement.classList.add('modal-open');
+          document.body.classList.add('modal-open');
+        }
+      });
+    }
+    if (closeCart){
+      closeCart.addEventListener('click', ()=>{
+        cartModal.classList.add('hidden');
+        document.documentElement.classList.remove('modal-open');
+        document.body.classList.remove('modal-open');
+      });
+    }
+  });
+  </script>
+</body>
+</html>
